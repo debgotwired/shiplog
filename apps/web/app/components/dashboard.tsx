@@ -133,6 +133,7 @@ export function Dashboard() {
     const id = draft.id || "entry_" + crypto.randomUUID();
     const nextEntry: Entry = { ...draft, id, projectId: activeProject.id, slug: draft.slug || slugify(draft.title), status, publishedAt: status === "published" ? now : draft.publishedAt, updatedAt: now, createdAt: draft.createdAt || now };
     setEntries((current) => [nextEntry, ...current.filter((entry) => entry.id !== id)]);
+    setQuery("");
     setDraft({ ...defaultDraft, projectId: activeProject.id });
     setTab("entries");
   }
