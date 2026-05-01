@@ -18,6 +18,8 @@ const seedState = (): ShiplogState => ({
 
 const statePath = path.join(process.cwd(), ".shiplog-data.json");
 const memoryKey = "__shiplog_state__";
+const remoteSeedOrgId = "00000000-0000-4000-8000-000000000001";
+const remoteSeedProjectId = "00000000-0000-4000-8000-000000000002";
 
 const hasSupabaseServer = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -132,6 +134,41 @@ const toEntryRow = (entry: Entry) => ({
   updated_at: entry.updatedAt
 });
 
+const remoteSeedState = (ids?: { orgId?: string; projectId?: string; entryIdsBySlug?: Record<string, string> }): ShiplogState => {
+  const org: Org = { ...demoOrg, id: ids?.orgId ?? remoteSeedOrgId };
+  const project: Project = { ...demoProject, id: ids?.projectId ?? remoteSeedProjectId, orgId: org.id };
+  const entries: Entry[] = demoEntries.map((entry, index) => ({
+    ...entry,
+    id: ids?.entryIdsBySlug?.[entry.slug] ?? `00000000-0000-4000-8000-${String(index + 101).padStart(12, "0")}`,
+    projectId: project.id
+  }));
+  return { org, projects: [project], entries };
+};
+
+const ensureRemoteSeed = async () => {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { data: existingOrg, error: orgLookupError } = await supabase.from("orgs").select("id").eq("slug", demoOrg.slug).maybeSingle();
+  if (orgLookupError) throw new Error(orgLookupError.message);
+  const { data: existingProject, error: projectLookupError } = await supabase.from("projects").select("id").eq("slug", demoProject.slug).maybeSingle();
+  if (projectLookupError) throw new Error(projectLookupError.message);
+  const { data: existingEntries, error: entryLookupError } = existingProject?.id
+    ? await supabase.from("entries").select("id, slug").eq("project_id", existingProject.id)
+    : { data: [], error: null };
+  if (entryLookupError) throw new Error(entryLookupError.message);
+
+  const seeded = remoteSeedState({
+    orgId: existingOrg?.id,
+    projectId: existingProject?.id,
+    entryIdsBySlug: Object.fromEntries((existingEntries ?? []).map((entry) => [entry.slug, entry.id]))
+  });
+  const orgInsert = await supabase.from("orgs").upsert(toOrgRow(seeded.org), { onConflict: "id" });
+  if (orgInsert.error) throw new Error(orgInsert.error.message);
+  const projectInsert = await supabase.from("projects").upsert(toProjectRow(seeded.projects[0]), { onConflict: "id" });
+  if (projectInsert.error) throw new Error(projectInsert.error.message);
+  const entryInsert = await supabase.from("entries").upsert(seeded.entries.map(toEntryRow), { onConflict: "id" });
+  if (entryInsert.error) throw new Error(entryInsert.error.message);
+};
+
 export const getState = async (): Promise<ShiplogState> => {
   if (!supabase) return readLocalState();
   const [{ data: orgs, error: orgError }, { data: projects, error: projectError }, { data: entries, error: entryError }] = await Promise.all([
@@ -140,17 +177,9 @@ export const getState = async (): Promise<ShiplogState> => {
     supabase.from("entries").select("*").order("created_at", { ascending: false })
   ]);
   if (orgError || projectError || entryError) throw new Error(orgError?.message ?? projectError?.message ?? entryError?.message);
-  if (!orgs?.[0]) {
-    const org: Org = { ...demoOrg, id: crypto.randomUUID() };
-    const project: Project = { ...demoProject, id: crypto.randomUUID(), orgId: org.id };
-    const entries: Entry[] = demoEntries.map((entry) => ({ ...entry, id: crypto.randomUUID(), projectId: project.id }));
-    const orgInsert = await supabase.from("orgs").insert(toOrgRow(org));
-    if (orgInsert.error) throw new Error(orgInsert.error.message);
-    const projectInsert = await supabase.from("projects").insert(toProjectRow(project));
-    if (projectInsert.error) throw new Error(projectInsert.error.message);
-    const entryInsert = await supabase.from("entries").insert(entries.map(toEntryRow));
-    if (entryInsert.error) throw new Error(entryInsert.error.message);
-    return { org, projects: [project], entries };
+  if (!orgs?.[0] || !projects?.some((project) => project.slug === demoProject.slug)) {
+    await ensureRemoteSeed();
+    return getState();
   }
   return {
     org: { id: orgs[0].id, name: orgs[0].name, slug: orgs[0].slug, isHosted: orgs[0].is_hosted, plan: orgs[0].plan },

@@ -25,7 +25,10 @@ test("dashboard supports entry creation, publishing, search, live preview, and p
 
   await page.goto("/changelog/acme-cloud");
   await expect(page.getByText(title)).toBeVisible();
-  const config = await request.get("/api/widget/demo-project/config");
+  const bootstrap = await request.get("/api/bootstrap");
+  const bootstrapData = await bootstrap.json();
+  const projectId = bootstrapData.projects.find((project: { slug: string }) => project.slug === "acme-cloud").id;
+  const config = await request.get(`/api/widget/${projectId}/config`);
   const data = await config.json();
   expect(JSON.stringify(data.entries)).toContain(title);
 });
