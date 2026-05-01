@@ -36,6 +36,18 @@ Result:
 - Passed: 12 tests
 - Browser: Chromium
 
+Production command:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://shiplog-psi.vercel.app pnpm e2e
+```
+
+Production result:
+
+- Passed: 12 tests
+- Browser: Chromium
+- Deployment alias: `https://shiplog-psi.vercel.app`
+
 Expanded coverage added:
 
 - Public changelog category filtering.
