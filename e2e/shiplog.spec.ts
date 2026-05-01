@@ -2,10 +2,6 @@ import { expect, test } from "@playwright/test";
 
 const modes = ["bell", "toast", "modal", "sidebar", "banner"] as const;
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.clear());
-});
-
 test("dashboard supports entry creation, publishing, search, and live preview", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Changelog operations console" })).toBeVisible();
@@ -70,6 +66,10 @@ test("public changelog supports search, category filtering, feeds, sitemap, and 
   await page.getByRole("button", { name: "Search" }).click();
   await expect(page.getByText("Visual targeting rules for page")).toBeVisible();
 
+  await page.goto("/changelog/acme-cloud?category=Targeting");
+  await expect(page.getByText("Visual targeting rules for page")).toBeVisible();
+  await expect(page.getByText("Adoption funnels now connect announcements")).toHaveCount(0);
+
   const rss = await request.get("/changelog/acme-cloud/rss.xml");
   expect(rss.ok()).toBeTruthy();
   expect(await rss.text()).toContain("<rss");
@@ -100,6 +100,12 @@ test("widget config and event APIs validate happy and unhappy paths", async ({ r
 
   const invalid = await request.post("/api/widget/demo-project/events", { data: { event: "unknown", visitorId: "vis_e2e" } });
   expect(invalid.status()).toBe(400);
+
+  const missingVisitor = await request.post("/api/widget/demo-project/events", { data: { event: "open", pageUrl: "https://example.com" } });
+  expect(missingVisitor.status()).toBe(400);
+
+  const badUrl = await request.post("/api/widget/demo-project/events", { data: { event: "open", visitorId: "vis_e2e", pageUrl: "not-a-url" } });
+  expect(badUrl.status()).toBe(400);
 });
 
 test("provider mock endpoints cover GitHub, Linear, AI, email, social, and distribution", async ({ request }) => {
@@ -130,3 +136,36 @@ for (const mode of modes) {
     await expect(page.locator("body")).toContainText("Visual targeting rules");
   });
 }
+
+test("widget bell supports unread reset, dismiss persistence, and CTA navigation", async ({ page }) => {
+  await page.goto("/demo-widget?mode=bell");
+  await expect(page.locator(".sl-badge")).toBeVisible();
+  await page.locator(".sl-bell").click();
+  await expect(page.getByText("Product updates")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.locator(".sl-badge")).toHaveCount(0);
+
+  await page.locator(".sl-bell").click();
+  const targetingArticle = page.locator("article").filter({ hasText: "Visual targeting rules" });
+  await targetingArticle.getByRole("button", { name: "Dismiss" }).click();
+  await page.reload();
+  await page.locator(".sl-bell").click();
+  await expect(page.locator("article").filter({ hasText: "Visual targeting rules" })).toHaveCount(0);
+
+  await page.goto("/demo-widget?mode=bell");
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.locator(".sl-bell").click();
+  await page.locator("article").filter({ hasText: "Visual targeting rules" }).getByRole("button", { name: "Open rule builder" }).click();
+  await expect(page).toHaveURL(/\/targeting$/);
+});
+
+test("mobile dashboard, public changelog, and widget avoid horizontal overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const url of ["/", "/changelog/acme-cloud", "/demo-widget?mode=sidebar"]) {
+    await page.goto(url);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, url).toBeLessThanOrEqual(2);
+  }
+  await expect(page.getByText("Product updates")).toBeVisible();
+});

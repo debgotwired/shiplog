@@ -80,7 +80,7 @@ function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone
 
 function Panel({ title, icon: Icon, action, children }: { title: string; icon?: React.ComponentType<{ size?: number }>; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="border border-line bg-[#fffdf8]/90 p-4 shadow-quiet">
+    <section className="min-w-0 border border-line bg-[#fffdf8]/90 p-4 shadow-quiet">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold">{Icon ? <Icon size={16} /> : null}{title}</div>
         {action}
@@ -156,8 +156,8 @@ export function Dashboard() {
   }
 
   return (
-    <main className="min-h-screen p-3 text-ink md:p-5">
-      <div className="mx-auto grid max-w-[1440px] grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+    <main className="min-h-screen overflow-x-hidden p-3 text-ink md:p-5">
+      <div className="mx-auto grid max-w-[1440px] min-w-0 grid-cols-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="border border-line bg-[#fffdf8] p-3 shadow-quiet lg:sticky lg:top-5 lg:h-[calc(100vh-40px)]">
           <div className="mb-5 flex items-center gap-3 border-b border-line pb-4">
             <div className="grid size-9 place-items-center bg-ink text-paper"><Rocket size={18} /></div>
@@ -223,7 +223,7 @@ export function Dashboard() {
 }
 
 function EntryTable({ entries, onEdit, onPublish }: { entries: Entry[]; onEdit: (entry: Entry) => void; onPublish?: (entry: Entry) => void }) {
-  return <div className="overflow-auto"><table className="w-full min-w-[760px] border-collapse text-sm"><thead><tr className="border-b border-line text-left text-xs uppercase tracking-[0.08em] text-neutral-500"><th className="py-2 pr-3">Entry</th><th className="py-2 pr-3">Type</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Categories</th><th className="py-2 pr-3">CTA</th><th className="py-2 text-right">Actions</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.id} className="border-b border-line/70"><td className="py-3 pr-3"><div className="font-medium">{entry.title}</div><div className="text-xs text-neutral-500">/{entry.slug}</div></td><td className="py-3 pr-3">{entry.type}</td><td className="py-3 pr-3"><Badge tone={entry.status === "published" ? "green" : entry.status === "scheduled" ? "amber" : "neutral"}>{entry.status}</Badge></td><td className="py-3 pr-3"><div className="flex flex-wrap gap-1">{entry.categories.map((category) => <Badge key={category}>{category}</Badge>)}</div></td><td className="py-3 pr-3">{entry.ctaLabel}</td><td className="py-3 text-right"><Button variant="ghost" onClick={() => onEdit(entry)}>Edit</Button>{onPublish && entry.status !== "published" ? <Button variant="secondary" onClick={() => onPublish(entry)}>Publish</Button> : null}</td></tr>)}</tbody></table></div>;
+  return <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[760px] border-collapse text-sm"><thead><tr className="border-b border-line text-left text-xs uppercase tracking-[0.08em] text-neutral-500"><th className="py-2 pr-3">Entry</th><th className="py-2 pr-3">Type</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Categories</th><th className="py-2 pr-3">CTA</th><th className="py-2 text-right">Actions</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.id} className="border-b border-line/70"><td className="py-3 pr-3"><div className="font-medium">{entry.title}</div><div className="text-xs text-neutral-500">/{entry.slug}</div></td><td className="py-3 pr-3">{entry.type}</td><td className="py-3 pr-3"><Badge tone={entry.status === "published" ? "green" : entry.status === "scheduled" ? "amber" : "neutral"}>{entry.status}</Badge></td><td className="py-3 pr-3"><div className="flex flex-wrap gap-1">{entry.categories.map((category) => <Badge key={category}>{category}</Badge>)}</div></td><td className="py-3 pr-3">{entry.ctaLabel}</td><td className="py-3 text-right"><Button variant="ghost" onClick={() => onEdit(entry)}>Edit</Button>{onPublish && entry.status !== "published" ? <Button variant="secondary" onClick={() => onPublish(entry)}>Publish</Button> : null}</td></tr>)}</tbody></table></div>;
 }
 
 function Checklist({ items }: { items: string[] }) { return <div className="grid gap-2">{items.map((item, index) => <div key={item} className="flex items-center gap-2 text-sm"><span className={cn("grid size-5 place-items-center border", index < 3 ? "border-pine bg-pine text-white" : "border-line bg-white")}><Check size={12} /></span>{item}</div>)}</div>; }
