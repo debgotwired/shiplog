@@ -1,6 +1,12 @@
-import { expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "@playwright/test";
 
 const modes = ["bell", "toast", "modal", "sidebar", "banner"] as const;
+
+async function getAcmeProjectId(request: APIRequestContext) {
+  const bootstrap = await request.get("/api/bootstrap");
+  const data = await bootstrap.json();
+  return data.projects.find((project) => project.slug === "acme-cloud")!.id;
+}
 
 test("dashboard supports entry creation, publishing, search, live preview, and public/widget sync", async ({ page, request }) => {
   const title = "QA release note " + Date.now();
@@ -25,9 +31,7 @@ test("dashboard supports entry creation, publishing, search, live preview, and p
 
   await page.goto("/changelog/acme-cloud");
   await expect(page.getByText(title)).toBeVisible();
-  const bootstrap = await request.get("/api/bootstrap");
-  const bootstrapData = await bootstrap.json();
-  const projectId = bootstrapData.projects.find((project: { slug: string }) => project.slug === "acme-cloud").id;
+  const projectId = await getAcmeProjectId(request);
   const config = await request.get(`/api/widget/${projectId}/config`);
   const data = await config.json();
   expect(JSON.stringify(data.entries)).toContain(title);
@@ -99,22 +103,23 @@ test("public changelog supports search, category filtering, feeds, sitemap, and 
 });
 
 test("widget config and event APIs validate happy and unhappy paths", async ({ request }) => {
-  const config = await request.get("/api/widget/demo-project/config");
+  const projectId = await getAcmeProjectId(request);
+  const config = await request.get(`/api/widget/${projectId}/config`);
   expect(config.ok()).toBeTruthy();
   const json = await config.json();
   expect(json.entries.length).toBeGreaterThan(0);
-  expect(json.project.id).toBe("demo-project");
+  expect(json.project.slug).toBe("acme-cloud");
 
-  const valid = await request.post("/api/widget/demo-project/events", { data: { event: "cta_click", visitorId: "vis_e2e", pageUrl: "https://example.com", payload: { mode: "bell" } } });
+  const valid = await request.post(`/api/widget/${projectId}/events`, { data: { event: "cta_click", visitorId: "vis_e2e", pageUrl: "https://example.com", payload: { mode: "bell" } } });
   expect(valid.ok()).toBeTruthy();
 
-  const invalid = await request.post("/api/widget/demo-project/events", { data: { event: "unknown", visitorId: "vis_e2e" } });
+  const invalid = await request.post(`/api/widget/${projectId}/events`, { data: { event: "unknown", visitorId: "vis_e2e" } });
   expect(invalid.status()).toBe(400);
 
-  const missingVisitor = await request.post("/api/widget/demo-project/events", { data: { event: "open", pageUrl: "https://example.com" } });
+  const missingVisitor = await request.post(`/api/widget/${projectId}/events`, { data: { event: "open", pageUrl: "https://example.com" } });
   expect(missingVisitor.status()).toBe(400);
 
-  const badUrl = await request.post("/api/widget/demo-project/events", { data: { event: "open", visitorId: "vis_e2e", pageUrl: "not-a-url" } });
+  const badUrl = await request.post(`/api/widget/${projectId}/events`, { data: { event: "open", visitorId: "vis_e2e", pageUrl: "not-a-url" } });
   expect(badUrl.status()).toBe(400);
 });
 
