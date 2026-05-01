@@ -1,26 +1,30 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
-import { demoProject, getPublicEntries } from "@/lib/demo-data";
+import { getProjectWithPublicEntries } from "@/lib/store";
 
 export async function generateMetadata({ params }: { params: Promise<{ projectSlug: string }> }): Promise<Metadata> {
   const { projectSlug } = await params;
-  return { title: `${demoProject.name} changelog`, description: "Product updates, improvements, and releases.", alternates: { canonical: `/changelog/${projectSlug}` } };
+  const data = await getProjectWithPublicEntries(projectSlug);
+  return { title: `${data?.project.name ?? "Shiplog"} changelog`, description: "Product updates, improvements, and releases.", alternates: { canonical: `/changelog/${projectSlug}` } };
 }
 
 export default async function PublicChangelog({ params, searchParams }: { params: Promise<{ projectSlug: string }>; searchParams: Promise<{ q?: string; category?: string }> }) {
-  await params;
+  const { projectSlug } = await params;
   const sp = await searchParams;
-  const entries = getPublicEntries().filter((entry) => {
+  const data = await getProjectWithPublicEntries(projectSlug);
+  if (!data) notFound();
+  const entries = data.entries.filter((entry) => {
     const text = [entry.title, entry.summary, entry.content, entry.categories.join(" ")].join(" ").toLowerCase();
     return (!sp.q || text.includes(sp.q.toLowerCase())) && (!sp.category || entry.categories.includes(sp.category));
   });
-  const categories = [...new Set(getPublicEntries().flatMap((entry) => entry.categories))];
+  const categories = [...new Set(data.entries.flatMap((entry) => entry.categories))];
 
   return (
     <main className="min-h-screen bg-[#f8f7f2] text-ink">
       <section className="border-b border-line bg-[#fffdf8]">
         <div className="mx-auto max-w-5xl px-5 py-10 md:py-14">
-          <div className="mb-5 inline-flex items-center gap-2 border border-line bg-white px-3 py-1 text-xs font-medium">{demoProject.name} updates</div>
+          <div className="mb-5 inline-flex items-center gap-2 border border-line bg-white px-3 py-1 text-xs font-medium">{data.project.name} updates</div>
           <h1 className="max-w-3xl text-4xl font-semibold tracking-tight md:text-6xl">What shipped, who it helps, and where to try it.</h1>
           <p className="mt-5 max-w-2xl text-lg text-neutral-600">A premium public changelog with RSS, Atom, search, category filtering, subscribe hooks, and widget-ready entry metadata.</p>
           <form className="mt-8 flex flex-col gap-2 md:flex-row">
@@ -28,7 +32,7 @@ export default async function PublicChangelog({ params, searchParams }: { params
             <select name="category" defaultValue={sp.category ?? ""} className="h-11 border border-line bg-white px-3 outline-none focus:border-pine"><option value="">All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}</select>
             <button className="h-11 bg-ink px-5 font-medium text-paper">Search</button>
           </form>
-          <div className="mt-4 flex gap-3 text-sm"><a href={`/changelog/${demoProject.slug}/rss.xml`} className="underline">RSS</a><a href={`/changelog/${demoProject.slug}/atom.xml`} className="underline">Atom</a></div>
+          <div className="mt-4 flex gap-3 text-sm"><a href={`/changelog/${data.project.slug}/rss.xml`} className="underline">RSS</a><a href={`/changelog/${data.project.slug}/atom.xml`} className="underline">Atom</a></div>
         </div>
       </section>
       <section className="mx-auto grid max-w-5xl gap-5 px-5 py-8">

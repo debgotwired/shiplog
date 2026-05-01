@@ -8,3 +8,5 @@
 6. Run `pnpm install`, `pnpm build`, and deploy `apps/web`.
 
 Self-hosted orgs should keep `is_hosted=false` in admin controls. The plan helper treats self-hosted as free with standard features unlocked and provider keys routed from encrypted org configuration.
+
+Demo mode is only for local evaluation and smoke tests. It shares data across the dashboard, public changelog, feeds, and widget config, but production deployments should use Supabase because serverless memory is not durable across cold starts or regions.

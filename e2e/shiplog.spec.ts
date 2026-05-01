@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 
 const modes = ["bell", "toast", "modal", "sidebar", "banner"] as const;
 
-test("dashboard supports entry creation, publishing, search, and live preview", async ({ page }) => {
+test("dashboard supports entry creation, publishing, search, live preview, and public/widget sync", async ({ page, request }) => {
+  const title = "QA release note " + Date.now();
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Changelog operations console" })).toBeVisible();
 
@@ -12,15 +13,21 @@ test("dashboard supports entry creation, publishing, search, and live preview", 
   await expect(page.getByText("Visual targeting rules for page")).toBeVisible();
 
   await page.getByRole("button", { name: /New entry/ }).click();
-  await page.getByLabel("Title").fill("QA release note for Playwright");
+  await page.getByLabel("Title").fill(title);
   await page.getByLabel("Summary").fill("A full browser pass created this draft and verified editor persistence.");
   await page.getByLabel("Markdown content").fill("## QA result\n\nThe editor, preview, draft save, and publish controls work.");
-  await expect(page.getByRole("heading", { name: "QA release note for Playwright" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("QA release note for Playwright")).toBeVisible();
-  const qaRow = page.getByRole("row").filter({ hasText: "QA release note for Playwright" });
+  await expect(page.getByText(title)).toBeVisible();
+  const qaRow = page.getByRole("row").filter({ hasText: title });
   await qaRow.getByRole("button", { name: "Publish" }).click();
   await expect(qaRow.getByText("published")).toBeVisible();
+
+  await page.goto("/changelog/acme-cloud");
+  await expect(page.getByText(title)).toBeVisible();
+  const config = await request.get("/api/widget/demo-project/config");
+  const data = await config.json();
+  expect(JSON.stringify(data.entries)).toContain(title);
 });
 
 test("dashboard exercises targeting, widget customization, email, social, integrations, admin, and adoption tabs", async ({ page }) => {

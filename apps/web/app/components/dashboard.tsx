@@ -7,7 +7,7 @@ import {
   KeyRound, LayoutDashboard, Mail, Megaphone, MousePointerClick, Plus, Rocket, Route, Rss, Search,
   Send, Settings, ShieldCheck, Sparkles, Split, Wand2, Webhook
 } from "lucide-react";
-import { demoEntries, demoOrg, demoProject, slugify } from "@/lib/demo-data";
+import { demoOrg, demoProject, slugify } from "@/lib/demo-data";
 import { getPlanLimits, type Entry, type Org, type Project, type TargetingGroup, type WidgetMode } from "@shiplog/shared";
 
 type Tab = "overview" | "entries" | "editor" | "targeting" | "widget" | "analytics" | "email" | "social" | "integrations" | "settings" | "admin" | "adoption";
@@ -52,16 +52,6 @@ const pageTargeting: TargetingGroup = { id: "target-demo", combinator: "and", ru
   { id: "segment", type: "segment", segmentId: "admins" },
   { id: "recency", type: "recency", value: "/settings", days: 7, minVisits: 2 }
 ] };
-
-function usePersistedState<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(initial);
-  useEffect(() => {
-    const stored = window.localStorage.getItem(key);
-    if (stored) setValue(JSON.parse(stored) as T);
-  }, [key]);
-  useEffect(() => window.localStorage.setItem(key, JSON.stringify(value)), [key, value]);
-  return [value, setValue] as const;
-}
 
 function cn(...parts: Array<string | false | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -112,10 +102,10 @@ function Stat({ label, value, detail }: { label: string; value: string; detail: 
 
 export function Dashboard() {
   const [tab, setTab] = useState<Tab>("overview");
-  const [org, setOrg] = usePersistedState<Org>("shiplog:org", demoOrg);
-  const [projects, setProjects] = usePersistedState<Project[]>("shiplog:projects", [demoProject]);
-  const [activeProjectId, setActiveProjectId] = usePersistedState("shiplog:active-project", demoProject.id);
-  const [entries, setEntries] = usePersistedState<Entry[]>("shiplog:entries", demoEntries);
+  const [org, setOrg] = useState<Org>(demoOrg);
+  const [projects, setProjects] = useState<Project[]>([demoProject]);
+  const [activeProjectId, setActiveProjectId] = useState(demoProject.id);
+  const [entries, setEntries] = useState<Entry[]>([]);
   const [draft, setDraft] = useState<Entry>(defaultDraft);
   const [query, setQuery] = useState("");
   const [emailStatus, setEmailStatus] = useState("Ready to mock instant, weekly, and monthly sends.");
@@ -123,23 +113,46 @@ export function Dashboard() {
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0];
   const limits = getPlanLimits(org);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/bootstrap")
+      .then((response) => response.json())
+      .then((data: { org: Org; projects: Project[]; entries: Entry[] }) => {
+        if (cancelled) return;
+        setOrg(data.org);
+        setProjects(data.projects);
+        setEntries(data.entries);
+        setActiveProjectId((current) => data.projects.some((project) => project.id === current) ? current : data.projects[0]?.id ?? demoProject.id);
+      })
+      .catch(() => setEmailStatus("Could not load backend data. Check Supabase or local dev store setup."));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const filteredEntries = useMemo(() => entries.filter((entry) => entry.projectId === activeProject.id && [entry.title, entry.summary, entry.categories.join(" "), entry.status].join(" ").toLowerCase().includes(query.toLowerCase())), [activeProject.id, entries, query]);
   const published = entries.filter((entry) => entry.status === "published").length;
   const widgetUrl = typeof window === "undefined" ? "/widget/shiplog.js" : window.location.origin + "/widget/shiplog.js";
   const snippet = `<script src="${widgetUrl}" data-project-id="${activeProject.id}" data-mode="${activeProject.widgetSettings.mode}" async></script>`;
 
-  function saveDraft(status: Entry["status"] = draft.status) {
+  async function saveDraft(status: Entry["status"] = draft.status) {
     const now = new Date().toISOString();
-    const id = draft.id || "entry_" + crypto.randomUUID();
+    const id = draft.id || crypto.randomUUID();
     const nextEntry: Entry = { ...draft, id, projectId: activeProject.id, slug: draft.slug || slugify(draft.title), status, publishedAt: status === "published" ? now : draft.publishedAt, updatedAt: now, createdAt: draft.createdAt || now };
-    setEntries((current) => [nextEntry, ...current.filter((entry) => entry.id !== id)]);
+    const response = await fetch("/api/entries", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(nextEntry) });
+    const data = await response.json() as { entry: Entry };
+    setEntries((current) => [data.entry, ...current.filter((entry) => entry.id !== data.entry.id)]);
     setQuery("");
     setDraft({ ...defaultDraft, projectId: activeProject.id });
     setTab("entries");
   }
 
-  function updateProject(patch: Partial<Project>) {
-    setProjects((current) => current.map((project) => project.id === activeProject.id ? { ...project, ...patch } : project));
+  async function updateProject(patch: Partial<Project>) {
+    const optimistic = { ...activeProject, ...patch };
+    setProjects((current) => current.map((project) => project.id === activeProject.id ? optimistic : project));
+    const response = await fetch(`/api/projects/${activeProject.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
+    const data = await response.json() as { project: Project };
+    setProjects((current) => current.map((project) => project.id === data.project.id ? data.project : project));
   }
 
   function generateAiDraft(source: "GitHub" | "Linear") {
@@ -148,11 +161,19 @@ export function Dashboard() {
     setTab("editor");
   }
 
-  function addProject() {
+  async function addProject() {
     const name = "Workspace " + (projects.length + 1);
-    const project: Project = { ...demoProject, id: "project_" + crypto.randomUUID(), name, slug: slugify(name), orgId: org.id };
+    const response = await fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, orgId: org.id }) });
+    const data = await response.json() as { project: Project };
+    const project = data.project;
     setProjects((current) => [...current, project]);
     setActiveProjectId(project.id);
+  }
+
+  async function publishEntry(entry: Entry) {
+    const response = await fetch(`/api/entries/${entry.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "published", publishedAt: new Date().toISOString() }) });
+    const data = await response.json() as { entry: Entry };
+    setEntries((current) => current.map((item) => item.id === data.entry.id ? data.entry : item));
   }
 
   return (
@@ -171,7 +192,7 @@ export function Dashboard() {
           <nav className="grid gap-1">
             {tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={cn("flex items-center gap-2 px-2 py-2 text-left text-sm", tab === item.id ? "bg-ink text-paper" : "hover:bg-black/5")}><item.icon size={16} />{item.label}</button>)}
           </nav>
-          <div className="mt-5 border-t border-line pt-4 text-xs text-neutral-600"><Badge tone={org.isHosted ? "green" : "amber"}>{org.isHosted ? "Hosted" : "Self-hosted"} {org.plan}</Badge><p className="mt-2">Demo mode persists changes in localStorage until Supabase is configured.</p></div>
+          <div className="mt-5 border-t border-line pt-4 text-xs text-neutral-600"><Badge tone={org.isHosted ? "green" : "amber"}>{org.isHosted ? "Hosted" : "Self-hosted"} {org.plan}</Badge><p className="mt-2">Dashboard, public page, feeds, and widget now read the same backend store.</p></div>
         </aside>
 
         <section className="min-w-0">
@@ -187,7 +208,7 @@ export function Dashboard() {
             <Panel title="Distribution checklist" icon={Check}><Checklist items={["Publish entry", "Target matching users", "Send instant email", "Queue weekly digest", "Generate social copy", "Post Slack/webhook", "Attach adoption tour"]} /></Panel>
           </div>}
 
-          {tab === "entries" && <Panel title="Entries" icon={Search} action={<Button onClick={() => { setDraft(defaultDraft); setTab("editor"); }}><Plus size={15} /> New entry</Button>}><div className="mb-3 flex flex-col gap-2 md:flex-row"><TextInput placeholder="Search entries, status, categories" value={query} onChange={(event) => setQuery(event.target.value)} className="md:w-80" /><Select defaultValue="all"><option value="all">All statuses</option><option>draft</option><option>scheduled</option><option>published</option></Select></div><EntryTable entries={filteredEntries} onEdit={(entry) => { setDraft(entry); setTab("editor"); }} onPublish={(entry) => setEntries((current) => current.map((item) => item.id === entry.id ? { ...item, status: "published", publishedAt: new Date().toISOString() } : item))} /></Panel>}
+          {tab === "entries" && <Panel title="Entries" icon={Search} action={<Button onClick={() => { setDraft(defaultDraft); setTab("editor"); }}><Plus size={15} /> New entry</Button>}><div className="mb-3 flex flex-col gap-2 md:flex-row"><TextInput placeholder="Search entries, status, categories" value={query} onChange={(event) => setQuery(event.target.value)} className="md:w-80" /><Select defaultValue="all"><option value="all">All statuses</option><option>draft</option><option>scheduled</option><option>published</option></Select></div><EntryTable entries={filteredEntries} onEdit={(entry) => { setDraft(entry); setTab("editor"); }} onPublish={publishEntry} /></Panel>}
 
           {tab === "editor" && <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
             <Panel title="Entry editor" icon={Wand2} action={<div className="flex gap-2"><Button variant="secondary" onClick={() => saveDraft("scheduled")}><CalendarClock size={15} /> Schedule</Button><Button onClick={() => saveDraft("published")}><Send size={15} /> Publish</Button></div>}>

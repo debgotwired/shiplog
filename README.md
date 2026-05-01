@@ -12,7 +12,9 @@ cp .env.example apps/web/.env.local
 pnpm dev
 ```
 
-Open http://localhost:3000. The app runs in demo mode without Supabase, Anthropic, Resend, GitHub, Linear, or social credentials.
+Open http://localhost:3000. The app runs in demo mode without Supabase, Anthropic, Resend, GitHub, Linear, or social credentials. Local demo mode uses a shared development store so dashboard-created projects and entries are visible on the public changelog, RSS/Atom feeds, and widget config.
+
+For real hosted or self-hosted persistence, configure Supabase and set `NEXT_PUBLIC_DEMO_MODE=false`. Without Supabase, production serverless deployments only have a non-durable fallback store for smoke testing.
 
 ## Structure
 

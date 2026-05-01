@@ -1,12 +1,19 @@
 import type { MetadataRoute } from "next";
-import { demoProject, getPublicEntries } from "@/lib/demo-data";
+import { getPublicEntriesForProject, getState } from "@/lib/store";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const state = await getState();
+  const projectEntries = await Promise.all(state.projects.map(async (project) => ({
+    project,
+    entries: await getPublicEntriesForProject(project.id)
+  })));
   return [
     { url: baseUrl, lastModified: new Date() },
     { url: `${baseUrl}/demo-widget`, lastModified: new Date() },
-    { url: `${baseUrl}/changelog/${demoProject.slug}`, lastModified: new Date() },
-    ...getPublicEntries().map((entry) => ({ url: `${baseUrl}/changelog/${demoProject.slug}#${entry.slug}`, lastModified: new Date(entry.updatedAt) }))
+    ...projectEntries.flatMap(({ project, entries }) => [
+      { url: `${baseUrl}/changelog/${project.slug}`, lastModified: new Date() },
+      ...entries.map((entry) => ({ url: `${baseUrl}/changelog/${project.slug}#${entry.slug}`, lastModified: new Date(entry.updatedAt) }))
+    ])
   ];
 }
