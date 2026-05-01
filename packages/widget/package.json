@@ -1,0 +1,26 @@
+{
+  "name": "@shiplog/widget",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/shiplog.umd.cjs",
+  "module": "dist/shiplog.js",
+  "types": "src/main.tsx",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.0.1",
+    "@shiplog/shared": "workspace:*",
+    "preact": "^10.26.6",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.1",
+    "vite": "^6.3.4"
+  }
+}
